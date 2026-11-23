@@ -5,6 +5,7 @@ import PublicRoute from './components/PublicRoute'
 import AppLayout from './layouts/AppLayout'
 import Dashboard from './pages/Dashboard'
 import Documents from './pages/Documents'
+import DocumentPreview from './pages/DocumentPreview'
 import Upload from './pages/Upload'
 import AiResearch from './pages/AiResearch'
 import ChatHistory from './pages/ChatHistory'
@@ -45,12 +46,13 @@ export default function App() {
             }
           >
             <Route index element={<Navigate to="/dashboard" replace />} />
-            <Route path="dashboard"    element={<Dashboard />} />
-            <Route path="documents"    element={<Documents />} />
-            <Route path="upload"       element={<Upload />} />
-            <Route path="research"     element={<AiResearch />} />
-            <Route path="chat-history" element={<ChatHistory />} />
-            <Route path="settings"     element={<Settings />} />
+            <Route path="dashboard"                 element={<Dashboard />} />
+            <Route path="documents"                 element={<Documents />} />
+            <Route path="documents/:id/preview"     element={<DocumentPreview />} />
+            <Route path="upload"                    element={<Upload />} />
+            <Route path="research"                  element={<AiResearch />} />
+            <Route path="chat-history"              element={<ChatHistory />} />
+            <Route path="settings"                  element={<Settings />} />
           </Route>
 
           {/* Fallback */}
