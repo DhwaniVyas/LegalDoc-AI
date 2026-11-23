@@ -69,6 +69,13 @@ class Document(Base):
     processed_at = Column(DateTime, nullable=True)
     processing_error = Column(Text, nullable=True)
 
+    # Embedding fields (Phase 5)
+    # embedding_status: not_started | pending | completed | failed
+    embedding_status = Column(String(50), default="not_started", nullable=False, index=True)
+    embedded_chunks = Column(Integer, default=0, nullable=False)
+    embedding_error = Column(Text, nullable=True)
+    embedded_at = Column(DateTime, nullable=True)
+
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(
         DateTime,

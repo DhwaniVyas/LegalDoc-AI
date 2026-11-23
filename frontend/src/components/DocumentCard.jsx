@@ -1,12 +1,12 @@
-import { FileText, Eye, Download, Trash2, Calendar, HardDrive, Layers, RefreshCw, Loader2 } from 'lucide-react'
+import { FileText, Eye, Download, Trash2, Calendar, HardDrive, Layers, RefreshCw, Loader2, Database, Sparkles } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { formatFileSize, formatDate } from '../services/documentService'
 
-export default function DocumentCard({ document, onDownload, onDelete, onInspect, onReprocess }) {
+export default function DocumentCard({ document, onDownload, onDelete, onInspect, onReprocess, onEmbed }) {
   const getProcessingBadge = (status) => {
     switch (status) {
       case 'completed':
-        return <span className="badge bg-emerald-50 text-emerald-700 border border-emerald-200">Completed</span>
+        return <span className="badge bg-emerald-50 text-emerald-700 border border-emerald-200">Text Extracted</span>
       case 'processing':
         return (
           <span className="badge bg-blue-50 text-blue-700 border border-blue-200 flex items-center gap-1 animate-pulse">
@@ -24,7 +24,35 @@ export default function DocumentCard({ document, onDownload, onDelete, onInspect
     }
   }
 
+  const getEmbeddingBadge = (status, chunks) => {
+    switch (status) {
+      case 'completed':
+        return (
+          <span className="badge bg-purple-50 text-purple-700 border border-purple-200 flex items-center gap-1">
+            <Sparkles size={11} /> Indexed ({chunks || 0})
+          </span>
+        )
+      case 'processing':
+      case 'pending':
+        return (
+          <span className="badge bg-indigo-50 text-indigo-700 border border-indigo-200 flex items-center gap-1 animate-pulse">
+            <Loader2 size={11} className="animate-spin" /> Indexing...
+          </span>
+        )
+      case 'failed':
+        return (
+          <span className="badge bg-rose-50 text-rose-700 border border-rose-200" title={document.embedding_error || 'Indexing failed'}>
+            Index Failed
+          </span>
+        )
+      default:
+        return <span className="badge bg-slate-100 text-slate-500">Not Indexed</span>
+    }
+  }
+
   const isProcessing = document.processing_status === 'processing'
+  const isEmbedding = document.embedding_status === 'processing' || document.embedding_status === 'pending'
+  const canEmbed = document.processing_status === 'completed' && document.total_chunks > 0 && !isEmbedding
 
   return (
     <div className="card p-5 hover:border-slate-300 transition-all flex flex-col justify-between group bg-white">
@@ -34,7 +62,10 @@ export default function DocumentCard({ document, onDownload, onDelete, onInspect
             <FileText size={20} className="text-navy-700" />
           </div>
           <div className="flex flex-col items-end gap-1">
-            {getProcessingBadge(document.processing_status)}
+            <div className="flex items-center gap-1">
+              {getProcessingBadge(document.processing_status)}
+              {getEmbeddingBadge(document.embedding_status, document.embedded_chunks)}
+            </div>
             {document.total_pages > 0 && (
               <span className="text-[11px] text-slate-400">
                 {document.total_pages} {document.total_pages === 1 ? 'page' : 'pages'} · {document.total_chunks} chunks
@@ -83,6 +114,16 @@ export default function DocumentCard({ document, onDownload, onDelete, onInspect
         </div>
 
         <div className="flex items-center gap-1">
+          {canEmbed && (
+            <button
+              onClick={() => onEmbed && onEmbed(document)}
+              disabled={isEmbedding}
+              title="Index/Re-index vector embeddings"
+              className="p-1.5 rounded-lg text-purple-600 hover:bg-purple-50 hover:text-purple-800 transition-colors"
+            >
+              <Database size={14} />
+            </button>
+          )}
           <button
             onClick={() => onReprocess(document)}
             disabled={isProcessing}

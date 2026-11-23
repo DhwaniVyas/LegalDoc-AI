@@ -71,4 +71,6 @@ logs/
 # ── Uploads / temp files ─────────────────────────────────────
 backend/uploads/
 backend/temp/
+backend/vector_store/
+
 

@@ -56,7 +56,11 @@ export default function Documents() {
 
       // Check if any document is still processing or pending
       const hasActiveJobs = data.items.some(
-        (d) => d.processing_status === 'pending' || d.processing_status === 'processing'
+        (d) =>
+          d.processing_status === 'pending' ||
+          d.processing_status === 'processing' ||
+          d.embedding_status === 'pending' ||
+          d.embedding_status === 'processing'
       )
 
       if (hasActiveJobs) {
@@ -121,6 +125,16 @@ export default function Documents() {
       fetchDocuments(page, search, false)
     } catch (err) {
       alert(err.response?.data?.detail || 'Failed to trigger reprocessing.')
+    }
+  }
+
+  // Embed trigger
+  const handleEmbed = async (doc) => {
+    try {
+      await documentService.embedDocument(doc.id)
+      fetchDocuments(page, search, false)
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Failed to trigger indexing.')
     }
   }
 
@@ -259,6 +273,7 @@ export default function Documents() {
           onDelete={handleDeleteClick}
           onInspect={handleInspect}
           onReprocess={handleReprocess}
+          onEmbed={handleEmbed}
         />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -270,6 +285,7 @@ export default function Documents() {
               onDelete={handleDeleteClick}
               onInspect={handleInspect}
               onReprocess={handleReprocess}
+              onEmbed={handleEmbed}
             />
           ))}
         </div>

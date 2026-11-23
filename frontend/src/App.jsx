@@ -8,6 +8,7 @@ import Documents from './pages/Documents'
 import DocumentPreview from './pages/DocumentPreview'
 import Upload from './pages/Upload'
 import AiResearch from './pages/AiResearch'
+import SemanticSearch from './pages/SemanticSearch'
 import ChatHistory from './pages/ChatHistory'
 import Settings from './pages/Settings'
 import Login from './pages/auth/Login'
@@ -51,6 +52,7 @@ export default function App() {
             <Route path="documents/:id/preview"     element={<DocumentPreview />} />
             <Route path="upload"                    element={<Upload />} />
             <Route path="research"                  element={<AiResearch />} />
+            <Route path="search"                    element={<SemanticSearch />} />
             <Route path="chat-history"              element={<ChatHistory />} />
             <Route path="settings"                  element={<Settings />} />
           </Route>

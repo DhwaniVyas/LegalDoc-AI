@@ -114,6 +114,25 @@ def reprocess_document(
     return DocumentPublic.model_validate(doc)
 
 
+@router.post("/{document_id}/embed", response_model=DocumentPublic)
+def embed_document(
+    document_id: str,
+    background_tasks: BackgroundTasks,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Trigger manual vector embedding generation and ChromaDB indexing for a document.
+    """
+    doc = document_service.index_document_embeddings(
+        db=db,
+        user_id=current_user.id,
+        document_id=document_id,
+        background_tasks=background_tasks,
+    )
+    return DocumentPublic.model_validate(doc)
+
+
 @router.get("/{document_id}/pages", response_model=List[DocumentPagePublic])
 def get_document_pages(
     document_id: str,

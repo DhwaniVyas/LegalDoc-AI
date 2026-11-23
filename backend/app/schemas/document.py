@@ -23,6 +23,12 @@ class DocumentPublic(BaseModel):
     processed_at: Optional[datetime]
     processing_error: Optional[str]
 
+    # Embedding fields (Phase 5)
+    embedding_status: str = "not_started"
+    embedded_chunks: int = 0
+    embedding_error: Optional[str] = None
+    embedded_at: Optional[datetime] = None
+
     created_at: datetime
     updated_at: datetime
 

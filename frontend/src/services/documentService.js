@@ -128,4 +128,22 @@ export const documentService = {
   deleteDocument: (id) => {
     return api.delete(`/documents/${id}`).then((res) => res.data)
   },
+
+  /**
+   * Trigger vector embedding generation and indexing for a document.
+   */
+  embedDocument: (id) => {
+    return api.post(`/documents/${id}/embed`).then((res) => res.data)
+  },
+
+  /**
+   * Perform semantic vector search over user's document chunks.
+   */
+  searchSemantic: ({ query, documentId = null, topK = 5 } = {}) => {
+    return api.post('/search/semantic', {
+      query,
+      document_id: documentId || null,
+      top_k: Number(topK) || 5,
+    }).then((res) => res.data)
+  },
 }

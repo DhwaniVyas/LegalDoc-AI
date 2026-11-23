@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.database import models
 from app.database.session import SessionLocal
-from app.services import chunking_service, pdf_extraction_service
+from app.services import chunking_service, embedding_service, pdf_extraction_service, vector_store_service
 
 # Base upload directory: backend/uploads/users/
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -218,6 +218,10 @@ async def save_uploaded_documents(
                 total_pages=0,
                 extracted_pages=0,
                 total_chunks=0,
+                embedding_status="not_started",
+                embedded_chunks=0,
+                embedding_error=None,
+                embedded_at=None,
             )
             db.add(doc)
             created_documents.append(doc)
@@ -369,8 +373,50 @@ def process_document_background(document_id: str) -> None:
         doc.processing_status = "completed"
         doc.processing_error = None
         doc.processed_at = datetime.now(timezone.utc)
-
+        doc.embedding_status = "pending"
         db.commit()
+
+        # Step 5: Automatically generate embeddings and persist to ChromaDB
+        if chunks_data:
+            try:
+                doc.embedding_status = "processing"
+                doc.embedding_error = None
+                db.commit()
+
+                # Clean any prior vector embeddings for this document (idempotency)
+                vector_store_service.delete_document_vectors(doc.id, user_id=doc.user_id)
+
+                created_chunks = (
+                    db.query(models.DocumentChunk)
+                    .filter(models.DocumentChunk.document_id == doc.id)
+                    .order_by(models.DocumentChunk.chunk_index.asc())
+                    .all()
+                )
+
+                chunk_texts = [c.content for c in created_chunks]
+                embeddings = embedding_service.generate_embeddings(chunk_texts)
+
+                vector_store_service.upsert_document_chunks(
+                    user_id=doc.user_id,
+                    document_id=doc.id,
+                    original_filename=doc.original_filename,
+                    chunks=created_chunks,
+                    embeddings=embeddings,
+                )
+
+                doc.embedding_status = "completed"
+                doc.embedded_chunks = len(created_chunks)
+                doc.embedded_at = datetime.now(timezone.utc)
+                doc.embedding_error = None
+                db.commit()
+            except Exception as emb_err:
+                doc.embedding_status = "failed"
+                doc.embedding_error = f"Embedding generation failed: {str(emb_err)}"
+                db.commit()
+        else:
+            doc.embedding_status = "not_started"
+            doc.embedded_chunks = 0
+            db.commit()
 
     except Exception:
         db.rollback()
@@ -409,6 +455,10 @@ def reprocess_user_document(
     # Reset status
     doc.processing_status = "pending"
     doc.processing_error = None
+    doc.embedding_status = "not_started"
+    doc.embedded_chunks = 0
+    doc.embedding_error = None
+    doc.embedded_at = None
     db.commit()
     db.refresh(doc)
 
@@ -485,13 +535,118 @@ def get_user_document_chunks(
     )
 
 
+def embed_document_background(document_id: str) -> None:
+    """
+    Background worker task to generate embeddings for a document's chunks
+    and persist them to ChromaDB.
+    """
+    db = SessionLocal()
+    try:
+        doc = db.query(models.Document).filter(models.Document.id == document_id).first()
+        if not doc:
+            return
+
+        chunks = (
+            db.query(models.DocumentChunk)
+            .filter(models.DocumentChunk.document_id == doc.id)
+            .order_by(models.DocumentChunk.chunk_index.asc())
+            .all()
+        )
+
+        if not chunks:
+            doc.embedding_status = "failed"
+            doc.embedding_error = "No extracted chunks available to embed."
+            db.commit()
+            return
+
+        doc.embedding_status = "processing"
+        doc.embedding_error = None
+        db.commit()
+
+        # Remove previous vectors to ensure idempotency
+        vector_store_service.delete_document_vectors(doc.id, user_id=doc.user_id)
+
+        chunk_texts = [c.content for c in chunks]
+        embeddings = embedding_service.generate_embeddings(chunk_texts)
+
+        vector_store_service.upsert_document_chunks(
+            user_id=doc.user_id,
+            document_id=doc.id,
+            original_filename=doc.original_filename,
+            chunks=chunks,
+            embeddings=embeddings,
+        )
+
+        doc.embedding_status = "completed"
+        doc.embedded_chunks = len(chunks)
+        doc.embedded_at = datetime.now(timezone.utc)
+        doc.embedding_error = None
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        try:
+            err_doc = db.query(models.Document).filter(models.Document.id == document_id).first()
+            if err_doc:
+                err_doc.embedding_status = "failed"
+                err_doc.embedding_error = f"Embedding generation failed: {str(e)}"
+                db.commit()
+        except Exception:
+            pass
+    finally:
+        db.close()
+
+
+def index_document_embeddings(
+    db: Session,
+    user_id: int,
+    document_id: str,
+    background_tasks: BackgroundTasks,
+) -> models.Document:
+    """
+    Trigger manual indexing/re-indexing of document embeddings.
+    """
+    doc = get_user_document_by_id(db, user_id, document_id)
+
+    if doc.processing_status != "completed":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Document text extraction must be completed before indexing embeddings.",
+        )
+
+    if doc.total_chunks == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Document has no text chunks to index.",
+        )
+
+    if doc.embedding_status == "processing":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Document is currently being indexed. Please wait until completion.",
+        )
+
+    doc.embedding_status = "pending"
+    doc.embedding_error = None
+    db.commit()
+    db.refresh(doc)
+
+    background_tasks.add_task(embed_document_background, doc.id)
+    return doc
+
+
 def delete_user_document(
     db: Session,
     user_id: int,
     document_id: str,
 ) -> None:
-    """Delete document physical file and database entry (cascades to pages and chunks)."""
+    """Delete document physical file, vector embeddings, and database entry (cascades to pages and chunks)."""
     doc = get_user_document_by_id(db, user_id, document_id)
+
+    # Clean vectors from ChromaDB
+    try:
+        vector_store_service.delete_document_vectors(doc.id, user_id=doc.user_id)
+    except Exception:
+        pass
 
     file_path = Path(doc.file_path)
     try:

@@ -1,12 +1,12 @@
-import { FileText, Eye, Download, Trash2, Layers, RefreshCw, Loader2 } from 'lucide-react'
+import { FileText, Eye, Download, Trash2, Layers, RefreshCw, Loader2, Database, Sparkles } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { formatFileSize, formatDate } from '../services/documentService'
 
-export default function DocumentTable({ documents, onDownload, onDelete, onInspect, onReprocess }) {
+export default function DocumentTable({ documents, onDownload, onDelete, onInspect, onReprocess, onEmbed }) {
   const getProcessingBadge = (status) => {
     switch (status) {
       case 'completed':
-        return <span className="badge bg-emerald-50 text-emerald-700 border border-emerald-200">Completed</span>
+        return <span className="badge bg-emerald-50 text-emerald-700 border border-emerald-200">Text Extracted</span>
       case 'processing':
         return (
           <span className="badge bg-blue-50 text-blue-700 border border-blue-200 flex items-center gap-1 animate-pulse">
@@ -24,6 +24,32 @@ export default function DocumentTable({ documents, onDownload, onDelete, onInspe
     }
   }
 
+  const getEmbeddingBadge = (status, chunks) => {
+    switch (status) {
+      case 'completed':
+        return (
+          <span className="badge bg-purple-50 text-purple-700 border border-purple-200 flex items-center gap-1">
+            <Sparkles size={11} /> Indexed ({chunks || 0})
+          </span>
+        )
+      case 'processing':
+      case 'pending':
+        return (
+          <span className="badge bg-indigo-50 text-indigo-700 border border-indigo-200 flex items-center gap-1 animate-pulse">
+            <Loader2 size={11} className="animate-spin" /> Indexing...
+          </span>
+        )
+      case 'failed':
+        return (
+          <span className="badge bg-rose-50 text-rose-700 border border-rose-200">
+            Index Failed
+          </span>
+        )
+      default:
+        return <span className="badge bg-slate-100 text-slate-500">Not Indexed</span>
+    }
+  }
+
   return (
     <div className="card overflow-hidden bg-white">
       <div className="overflow-x-auto">
@@ -33,7 +59,7 @@ export default function DocumentTable({ documents, onDownload, onDelete, onInspe
               <th className="py-3.5 px-4">Document Name</th>
               <th className="py-3.5 px-4">File Size</th>
               <th className="py-3.5 px-4">Pages / Chunks</th>
-              <th className="py-3.5 px-4">Processing Status</th>
+              <th className="py-3.5 px-4">Status & Index</th>
               <th className="py-3.5 px-4">Uploaded On</th>
               <th className="py-3.5 px-4 text-right">Actions</th>
             </tr>
@@ -41,6 +67,9 @@ export default function DocumentTable({ documents, onDownload, onDelete, onInspe
           <tbody className="divide-y divide-slate-100">
             {documents.map((doc) => {
               const isProcessing = doc.processing_status === 'processing'
+              const isEmbedding = doc.embedding_status === 'processing' || doc.embedding_status === 'pending'
+              const canEmbed = doc.processing_status === 'completed' && doc.total_chunks > 0 && !isEmbedding
+
               return (
                 <tr key={doc.id} className="hover:bg-slate-50/50 transition-colors">
                   <td className="py-3.5 px-4">
@@ -70,13 +99,26 @@ export default function DocumentTable({ documents, onDownload, onDelete, onInspe
                     )}
                   </td>
                   <td className="py-3.5 px-4 whitespace-nowrap">
-                    {getProcessingBadge(doc.processing_status)}
+                    <div className="flex flex-col gap-1 items-start">
+                      {getProcessingBadge(doc.processing_status)}
+                      {getEmbeddingBadge(doc.embedding_status, doc.embedded_chunks)}
+                    </div>
                   </td>
                   <td className="py-3.5 px-4 text-slate-500 whitespace-nowrap text-xs">
                     {formatDate(doc.created_at)}
                   </td>
                   <td className="py-3.5 px-4 text-right whitespace-nowrap">
                     <div className="inline-flex items-center gap-1">
+                      {canEmbed && (
+                        <button
+                          onClick={() => onEmbed && onEmbed(doc)}
+                          disabled={isEmbedding}
+                          className="btn-ghost p-1.5 text-purple-600 hover:text-purple-800 hover:bg-purple-50"
+                          title="Index/Re-index vector embeddings"
+                        >
+                          <Database size={15} />
+                        </button>
+                      )}
                       <button
                         onClick={() => onInspect(doc)}
                         className="btn-ghost p-1.5 text-slate-600 hover:text-navy-800 hover:bg-slate-100"
@@ -101,7 +143,7 @@ export default function DocumentTable({ documents, onDownload, onDelete, onInspe
                       </Link>
                       <button
                         onClick={() => onDownload(doc)}
-                        className="btn-ghost p-1.5 text-slate-600 hover:text-slate-800"
+                        className="btn-ghost p-1.5 text-slate-500 hover:text-slate-700"
                         title="Download PDF"
                       >
                         <Download size={16} />
