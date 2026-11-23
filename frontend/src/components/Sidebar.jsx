@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard,
@@ -9,7 +10,9 @@ import {
   Scale,
   LogOut,
   ChevronRight,
+  Loader2,
 } from 'lucide-react'
+import { useAuth } from '../context/AuthContext'
 
 const navItems = [
   { to: '/dashboard',    label: 'Dashboard',    icon: LayoutDashboard },
@@ -42,13 +45,38 @@ function NavItem({ to, label, icon: Icon }) {
   )
 }
 
+/** Returns the user's initials (up to 2 letters) for the avatar fallback. */
+function getInitials(user) {
+  if (user?.full_name) {
+    return user.full_name
+      .split(' ')
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((w) => w[0].toUpperCase())
+      .join('')
+  }
+  return user?.email?.[0]?.toUpperCase() ?? 'U'
+}
+
 export default function Sidebar() {
   const navigate = useNavigate()
+  const { user, logout } = useAuth()
+  const [logoutLoading, setLogoutLoading] = useState(false)
 
-  const handleLogout = () => {
-    // Will call POST /api/auth/logout in the future
-    navigate('/login')
+  const handleLogout = async () => {
+    setLogoutLoading(true)
+    try {
+      await logout()
+      navigate('/login', { replace: true })
+    } catch {
+      navigate('/login', { replace: true })
+    } finally {
+      setLogoutLoading(false)
+    }
   }
+
+  const displayName  = user?.full_name || user?.email?.split('@')[0] || 'User'
+  const displayEmail = user?.email || ''
 
   return (
     <aside className="flex flex-col w-64 shrink-0 bg-navy-950 h-full">
@@ -80,26 +108,35 @@ export default function Sidebar() {
         ))}
         <button
           onClick={handleLogout}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-300 hover:bg-navy-800 hover:text-white transition-colors duration-150"
+          disabled={logoutLoading}
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-300 hover:bg-navy-800 hover:text-white transition-colors duration-150 disabled:opacity-50"
         >
-          <LogOut size={18} className="shrink-0" />
-          <span>Logout</span>
+          {logoutLoading ? <Loader2 size={18} className="shrink-0 animate-spin" /> : <LogOut size={18} className="shrink-0" />}
+          <span>{logoutLoading ? 'Logging out...' : 'Logout'}</span>
         </button>
       </div>
 
       {/* User pill */}
       <div className="px-3 pb-4">
         <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-navy-900">
-          <div className="w-7 h-7 rounded-full bg-navy-600 flex items-center justify-center shrink-0">
-            <span className="text-xs text-white font-medium">U</span>
-          </div>
+          {user?.avatar_url ? (
+            <img
+              src={user.avatar_url}
+              alt={displayName}
+              className="w-7 h-7 rounded-full object-cover shrink-0"
+              referrerPolicy="no-referrer"
+            />
+          ) : (
+            <div className="w-7 h-7 rounded-full bg-navy-600 flex items-center justify-center shrink-0">
+              <span className="text-xs text-white font-medium">{getInitials(user)}</span>
+            </div>
+          )}
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-medium text-white truncate">User</p>
-            <p className="text-xs text-navy-400 truncate">user@example.com</p>
+            <p className="text-xs font-medium text-white truncate">{displayName}</p>
+            <p className="text-xs text-navy-400 truncate">{displayEmail}</p>
           </div>
         </div>
       </div>
     </aside>
   )
 }
-

@@ -12,6 +12,7 @@ python-multipart==0.0.20
 pydantic[email]==2.10.2
 pydantic-settings==2.6.1
 alembic==1.14.0
+slowapi==0.1.9
 
 # Future AI/RAG dependencies (install when needed)
 # langchain==0.3.9

@@ -1,4 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { AuthProvider } from './context/AuthContext'
+import ProtectedRoute from './components/ProtectedRoute'
+import PublicRoute from './components/PublicRoute'
 import AppLayout from './layouts/AppLayout'
 import Dashboard from './pages/Dashboard'
 import Documents from './pages/Documents'
@@ -11,26 +14,49 @@ import Register from './pages/auth/Register'
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        {/* Auth routes */}
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          {/* Public-only routes – redirect to dashboard if already logged in */}
+          <Route
+            path="/login"
+            element={
+              <PublicRoute>
+                <Login />
+              </PublicRoute>
+            }
+          />
+          <Route
+            path="/register"
+            element={
+              <PublicRoute>
+                <Register />
+              </PublicRoute>
+            }
+          />
 
-        {/* App routes – wrapped in sidebar layout */}
-        <Route path="/" element={<AppLayout />}>
-          <Route index element={<Navigate to="/dashboard" replace />} />
-          <Route path="dashboard" element={<Dashboard />} />
-          <Route path="documents" element={<Documents />} />
-          <Route path="upload" element={<Upload />} />
-          <Route path="research" element={<AiResearch />} />
-          <Route path="chat-history" element={<ChatHistory />} />
-          <Route path="settings" element={<Settings />} />
-        </Route>
+          {/* Protected app routes */}
+          <Route
+            path="/"
+            element={
+              <ProtectedRoute>
+                <AppLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<Navigate to="/dashboard" replace />} />
+            <Route path="dashboard"    element={<Dashboard />} />
+            <Route path="documents"    element={<Documents />} />
+            <Route path="upload"       element={<Upload />} />
+            <Route path="research"     element={<AiResearch />} />
+            <Route path="chat-history" element={<ChatHistory />} />
+            <Route path="settings"     element={<Settings />} />
+          </Route>
 
-        {/* Fallback */}
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
-      </Routes>
-    </BrowserRouter>
+          {/* Fallback */}
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
   )
 }
