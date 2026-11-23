@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import {
   FileText,
@@ -17,6 +17,7 @@ import LoadingSpinner from '../components/LoadingSpinner'
 import DocumentCard from '../components/DocumentCard'
 import DocumentTable from '../components/DocumentTable'
 import DeleteDocumentModal from '../components/DeleteDocumentModal'
+import DocumentInspectionModal from '../components/DocumentInspectionModal'
 import { documentService } from '../services/documentService'
 
 export default function Documents() {
@@ -30,13 +31,17 @@ export default function Documents() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  // Delete modal state
+  // Modals state
   const [docToDelete, setDocToDelete] = useState(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [docToInspect, setDocToInspect] = useState(null)
+
+  // Polling ref
+  const pollingTimerRef = useRef(null)
 
   // Fetch documents
-  const fetchDocuments = useCallback(async (targetPage = 1, searchQuery = '') => {
-    setLoading(true)
+  const fetchDocuments = useCallback(async (targetPage = 1, searchQuery = '', showLoading = true) => {
+    if (showLoading) setLoading(true)
     setError('')
     try {
       const data = await documentService.getDocuments({
@@ -48,15 +53,30 @@ export default function Documents() {
       setTotal(data.total)
       setPage(data.page)
       setTotalPages(data.total_pages)
+
+      // Check if any document is still processing or pending
+      const hasActiveJobs = data.items.some(
+        (d) => d.processing_status === 'pending' || d.processing_status === 'processing'
+      )
+
+      if (hasActiveJobs) {
+        clearTimeout(pollingTimerRef.current)
+        pollingTimerRef.current = setTimeout(() => {
+          fetchDocuments(targetPage, searchQuery, false)
+        }, 3000)
+      }
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to load documents. Please try again.')
     } finally {
-      setLoading(false)
+      if (showLoading) setLoading(false)
     }
   }, [pageSize])
 
   useEffect(() => {
     fetchDocuments(page, search)
+    return () => {
+      clearTimeout(pollingTimerRef.current)
+    }
   }, [page, search, fetchDocuments])
 
   // Search handler
@@ -85,7 +105,6 @@ export default function Documents() {
     try {
       await documentService.deleteDocument(docId)
       setDocToDelete(null)
-      // Refresh current page (or page 1 if this was the only item on the last page)
       const nextPage = documents.length === 1 && page > 1 ? page - 1 : page
       fetchDocuments(nextPage, search)
     } catch (err) {
@@ -95,12 +114,27 @@ export default function Documents() {
     }
   }
 
+  // Reprocess trigger
+  const handleReprocess = async (doc) => {
+    try {
+      await documentService.reprocessDocument(doc.id)
+      fetchDocuments(page, search, false)
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Failed to trigger reprocessing.')
+    }
+  }
+
+  // Inspect trigger
+  const handleInspect = (doc) => {
+    setDocToInspect(doc)
+  }
+
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-6">
       {/* Page Header */}
       <PageHeader
         title="My Documents"
-        subtitle="Manage, preview, and download your uploaded legal PDF documents."
+        subtitle="Manage, preview, inspect extracted text & chunks, and download legal PDF documents."
         action={
           <Link to="/upload" className="btn-primary">
             <Upload size={16} />
@@ -223,6 +257,8 @@ export default function Documents() {
           documents={documents}
           onDownload={handleDownload}
           onDelete={handleDeleteClick}
+          onInspect={handleInspect}
+          onReprocess={handleReprocess}
         />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -232,6 +268,8 @@ export default function Documents() {
               document={doc}
               onDownload={handleDownload}
               onDelete={handleDeleteClick}
+              onInspect={handleInspect}
+              onReprocess={handleReprocess}
             />
           ))}
         </div>
@@ -283,6 +321,14 @@ export default function Documents() {
         onConfirm={handleConfirmDelete}
         onCancel={() => setDocToDelete(null)}
         isDeleting={isDeleting}
+      />
+
+      {/* Document Processing & Chunk Inspection Modal */}
+      <DocumentInspectionModal
+        isOpen={Boolean(docToInspect)}
+        document={docToInspect}
+        onClose={() => setDocToInspect(null)}
+        onReprocess={handleReprocess}
       />
     </div>
   )

@@ -9,6 +9,8 @@ export default function FileUpload({ files, setFiles, error, setError }) {
   const [isDragging, setIsDragging] = useState(false)
   const fileInputRef = useRef(null)
 
+  const normalizeName = (name) => name.trim().toLowerCase()
+
   const validateAndAddFiles = (newFiles) => {
     setError('')
     const incoming = Array.from(newFiles)
@@ -20,7 +22,11 @@ export default function FileUpload({ files, setFiles, error, setError }) {
     }
 
     const validFiles = []
+    const existingNormalized = new Set(files.map((f) => normalizeName(f.name)))
+
     for (const file of incoming) {
+      const norm = normalizeName(file.name)
+
       // 1. Check extension
       if (!file.name.toLowerCase().endsWith('.pdf')) {
         setError(`"${file.name}" is not a PDF. Only .pdf files are accepted.`)
@@ -36,11 +42,13 @@ export default function FileUpload({ files, setFiles, error, setError }) {
         setError(`"${file.name}" exceeds the 20 MB size limit (${formatFileSize(file.size)}).`)
         return
       }
-      // 4. Check duplicate in current selection
-      if (files.some((f) => f.name === file.name && f.size === file.size)) {
-        setError(`"${file.name}" is already selected.`)
+      // 4. Check duplicate in current selection (case-insensitive)
+      if (existingNormalized.has(norm)) {
+        setError(`"${file.name}" is already in your selected list. Duplicate files in the same upload are not allowed.`)
         return
       }
+
+      existingNormalized.add(norm)
       validFiles.push(file)
     }
 
@@ -161,4 +169,3 @@ export default function FileUpload({ files, setFiles, error, setError }) {
     </div>
   )
 }
-

@@ -1,6 +1,5 @@
 /**
- * Document service – API calls for document management.
- * Uses the authenticated Axios instance with credentials.
+ * Document service – API calls for document management, processing, and chunk inspection.
  */
 import api from '../lib/api'
 
@@ -28,7 +27,6 @@ export const formatDate = (dateString) => {
 export const documentService = {
   /**
    * Upload multiple PDF files (up to 5).
-   * Do NOT set Content-Type header explicitly so browser sets multipart boundary correctly.
    */
   uploadDocuments: (files, onProgress) => {
     const formData = new FormData()
@@ -38,7 +36,7 @@ export const documentService = {
 
     return api.post('/documents/upload', formData, {
       headers: {
-        'Content-Type': undefined, // Let Axios/browser automatically handle multipart/form-data boundary
+        'Content-Type': undefined,
       },
       onUploadProgress: (progressEvent) => {
         if (onProgress && progressEvent.total) {
@@ -70,8 +68,35 @@ export const documentService = {
   },
 
   /**
+   * Reprocess document text extraction and chunking.
+   */
+  reprocessDocument: (id) => {
+    return api.post(`/documents/${id}/process`).then((res) => res.data)
+  },
+
+  /**
+   * Inspect extracted pages and chunks for a document.
+   */
+  getDocumentInspection: (id) => {
+    return api.get(`/documents/${id}/inspection`).then((res) => res.data)
+  },
+
+  /**
+   * Get extracted pages only.
+   */
+  getDocumentPages: (id) => {
+    return api.get(`/documents/${id}/pages`).then((res) => res.data)
+  },
+
+  /**
+   * Get extracted chunks only.
+   */
+  getDocumentChunks: (id) => {
+    return api.get(`/documents/${id}/chunks`).then((res) => res.data)
+  },
+
+  /**
    * Fetch PDF blob for inline preview.
-   * Returns a local object URL to be used in iframe/embed.
    */
   getPreviewUrl: async (id) => {
     const response = await api.get(`/documents/${id}/preview`, {
@@ -81,7 +106,7 @@ export const documentService = {
   },
 
   /**
-   * Download PDF attachment preserving filename.
+   * Download PDF attachment.
    */
   downloadDocument: async (id, filename) => {
     const response = await api.get(`/documents/${id}/download`, {
@@ -104,4 +129,3 @@ export const documentService = {
     return api.delete(`/documents/${id}`).then((res) => res.data)
   },
 }
-
