@@ -1,0 +1,21 @@
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+sqlalchemy==2.0.36
+python-dotenv==1.0.1
+python-jose[cryptography]==3.3.0
+passlib[argon2]==1.7.4
+argon2-cffi==23.1.0
+httpx==0.28.0
+requests==2.32.3
+google-auth==2.36.0
+python-multipart==0.0.20
+pydantic[email]==2.10.2
+pydantic-settings==2.6.1
+alembic==1.14.0
+
+# Future AI/RAG dependencies (install when needed)
+# langchain==0.3.9
+# langchain-google-genai==2.0.5
+# sentence-transformers==3.3.1
+# chromadb==0.5.23
+# pymupdf==1.24.14
