@@ -22,6 +22,9 @@ import {
 import PageHeader from '../components/PageHeader'
 import EmptyState from '../components/EmptyState'
 import { documentService } from '../services/documentService'
+import LegalAnswerRenderer from '../components/LegalAnswerRenderer'
+
+const FormattedLegalAnswer = LegalAnswerRenderer
 
 const EXAMPLE_QUESTIONS = [
   'Explain the Right to Equality under the Constitution of India.',
@@ -30,142 +33,6 @@ const EXAMPLE_QUESTIONS = [
   'Compare Articles 14 and 15 in detail.',
   'What constitutes a material breach and what are the remedies?',
 ]
-
-// Render markdown inline text with bolding and interactive citation badges
-function renderInlineContent(text, scrollToSource) {
-  if (!text) return null
-  const tokens = text.split(/(\[S\d+\]|\*\*.*?\*\*)/g)
-  return tokens.map((token, idx) => {
-    const cidMatch = token.match(/^\[(S\d+)\]$/)
-    if (cidMatch) {
-      const cid = cidMatch[1]
-      return (
-        <button
-          key={idx}
-          type="button"
-          onClick={() => scrollToSource(cid)}
-          className="inline-flex items-center px-1.5 py-0.5 mx-0.5 rounded text-[11px] font-semibold bg-navy-100 text-navy-800 hover:bg-navy-200 transition-colors cursor-pointer border border-navy-200 align-baseline"
-          title={`Jump to Source [${cid}]`}
-        >
-          [{cid}]
-        </button>
-      )
-    }
-    const boldMatch = token.match(/^\*\*(.*?)\*\*$/)
-    if (boldMatch) {
-      return (
-        <strong key={idx} className="font-semibold text-slate-900">
-          {renderInlineContent(boldMatch[1], scrollToSource)}
-        </strong>
-      )
-    }
-    return <span key={idx}>{token}</span>
-  })
-}
-
-// Full structured legal answer renderer (Headings, Lists, Paragraphs, Citations)
-function FormattedLegalAnswer({ text, scrollToSource, isStreaming }) {
-  if (!text) return null
-
-  const lines = text.split('\n')
-  const elements = []
-  let listItems = []
-  let listType = null
-
-  const flushList = (key) => {
-    if (listItems.length === 0) return
-    if (listType === 'ol') {
-      elements.push(
-        <ol key={`list-${key}`} className="list-decimal pl-6 my-2 space-y-1.5 text-slate-800 text-sm">
-          {listItems.map((item, i) => (
-            <li key={i}>{renderInlineContent(item, scrollToSource)}</li>
-          ))}
-        </ol>
-      )
-    } else {
-      elements.push(
-        <ul key={`list-${key}`} className="list-disc pl-6 my-2 space-y-1.5 text-slate-800 text-sm">
-          {listItems.map((item, i) => (
-            <li key={i}>{renderInlineContent(item, scrollToSource)}</li>
-          ))}
-        </ul>
-      )
-    }
-    listItems = []
-    listType = null
-  }
-
-  lines.forEach((line, idx) => {
-    const trimmed = line.trim()
-
-    if (trimmed.startsWith('### ')) {
-      flushList(idx)
-      elements.push(
-        <h3 key={idx} className="text-base font-bold text-slate-900 mt-4 mb-2 pb-1 border-b border-slate-100">
-          {renderInlineContent(trimmed.substring(4), scrollToSource)}
-        </h3>
-      )
-      return
-    }
-    if (trimmed.startsWith('## ')) {
-      flushList(idx)
-      elements.push(
-        <h2 key={idx} className="text-lg font-bold text-slate-900 mt-5 mb-2 pb-1 border-b border-slate-200">
-          {renderInlineContent(trimmed.substring(3), scrollToSource)}
-        </h2>
-      )
-      return
-    }
-    if (trimmed.startsWith('# ')) {
-      flushList(idx)
-      elements.push(
-        <h1 key={idx} className="text-xl font-bold text-slate-900 mt-6 mb-2">
-          {renderInlineContent(trimmed.substring(2), scrollToSource)}
-        </h1>
-      )
-      return
-    }
-
-    const numMatch = trimmed.match(/^(\d+)\.\s+(.*)/)
-    if (numMatch) {
-      if (listType && listType !== 'ol') flushList(idx)
-      listType = 'ol'
-      listItems.push(numMatch[2])
-      return
-    }
-
-    const bulletMatch = trimmed.match(/^[-*]\s+(.*)/)
-    if (bulletMatch) {
-      if (listType && listType !== 'ul') flushList(idx)
-      listType = 'ul'
-      listItems.push(bulletMatch[1])
-      return
-    }
-
-    if (!trimmed) {
-      flushList(idx)
-      return
-    }
-
-    flushList(idx)
-    elements.push(
-      <p key={idx} className="text-sm leading-relaxed text-slate-800 my-2">
-        {renderInlineContent(line, scrollToSource)}
-      </p>
-    )
-  })
-
-  flushList('final')
-
-  return (
-    <div className="space-y-1">
-      {elements}
-      {isStreaming && (
-        <span className="inline-block w-2 h-4 bg-navy-600 animate-pulse ml-1 align-middle" />
-      )}
-    </div>
-  )
-}
 
 export default function AskQuestion() {
   const [searchParams] = useSearchParams()
@@ -229,7 +96,7 @@ export default function AskQuestion() {
         signal: abortControllerRef.current.signal,
         onSources: (sources, timings) => {
           currentSources = sources
-          setStageMessage('Generating grounded legal analysis with Gemini...')
+          setStageMessage('Generating grounded legal analysis with Groq...')
           setQaResponse({
             question: cleanQ,
             answer: '',
@@ -336,7 +203,7 @@ export default function AskQuestion() {
     <div className="p-8 max-w-5xl mx-auto space-y-6">
       <PageHeader
         title="AI Legal Question Answering"
-        subtitle="Ask complex legal questions grounded strictly in your indexed documents, powered by multi-aspect semantic retrieval, contiguous clause expansion, and Gemini 3.8."
+        subtitle="Ask complex legal questions grounded strictly in your indexed documents, powered by multi-aspect semantic retrieval, contiguous clause expansion, and Groq (openai/gpt-oss-120b)."
       />
 
       {/* Privacy Notice Banner */}
@@ -347,7 +214,7 @@ export default function AskQuestion() {
             Privacy & Grounding Guarantee
           </p>
           <p>
-            Relevant extracted text passages from your indexed documents are retrieved via local vector embeddings, enriched with adjacent provisions, and passed to Gemini. Responses are grounded strictly in your files and do not constitute formal legal counsel.
+            Relevant extracted text passages from your indexed documents are retrieved via local vector embeddings, enriched with adjacent provisions, and passed to Groq. Responses are grounded strictly in your files and do not constitute formal legal counsel.
           </p>
         </div>
       </div>
@@ -444,7 +311,7 @@ export default function AskQuestion() {
               {asking ? (
                 <>
                   <Loader2 size={16} className="animate-spin" />
-                  <span>Researching with Gemini...</span>
+                  <span>Researching with Groq...</span>
                 </>
               ) : (
                 <>
@@ -497,7 +364,7 @@ export default function AskQuestion() {
             <div className="space-y-0.5">
               <p className="font-semibold text-xs uppercase tracking-wider">
                 {qaErrorStatus === 503
-                  ? 'Gemini Service Temporarily Overloaded (503)'
+                  ? 'Groq Service Temporarily Unavailable (503)'
                   : qaErrorStatus === 429
                   ? 'Rate Limit / Quota Exceeded (429)'
                   : 'Question Processing Error'}

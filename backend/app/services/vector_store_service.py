@@ -175,16 +175,19 @@ def query_semantic_chunks(
     query_embedding: List[float],
     top_k: int = 5,
     document_id: Optional[str] = None,
+    document_ids: Optional[List[str]] = None,
 ) -> List[Dict[str, Any]]:
     """
     Query ChromaDB for the most semantically relevant document chunks.
     Strictly filters by user_id to prevent cross-user data leakage.
+    Supports single document_id or multi-document document_ids filtering.
 
     Args:
         user_id: Authenticated user ID (required).
         query_embedding: 384-d query vector.
         top_k: Number of nearest neighbors to retrieve (1-50).
-        document_id: Optional document ID filter.
+        document_id: Optional single document ID filter.
+        document_ids: Optional list of document ID filters.
 
     Returns:
         List of result dicts with chunk_id, document_id, filename, page_number,
@@ -195,12 +198,25 @@ def query_semantic_chunks(
 
     collection = get_collection()
 
+    clean_doc_ids = []
+    if document_ids:
+        clean_doc_ids = [str(d).strip() for d in document_ids if d and str(d).strip()]
+    elif document_id and str(document_id).strip():
+        clean_doc_ids = [str(document_id).strip()]
+
     # Enforce strict user isolation
-    if document_id and str(document_id).strip():
+    if len(clean_doc_ids) == 1:
         where_filter = {
             "$and": [
                 {"user_id": int(user_id)},
-                {"document_id": str(document_id).strip()},
+                {"document_id": clean_doc_ids[0]},
+            ]
+        }
+    elif len(clean_doc_ids) > 1:
+        where_filter = {
+            "$and": [
+                {"user_id": int(user_id)},
+                {"document_id": {"$in": clean_doc_ids}},
             ]
         }
     else:

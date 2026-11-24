@@ -10,6 +10,7 @@ import Upload from './pages/Upload'
 import AiResearch from './pages/AiResearch'
 import SemanticSearch from './pages/SemanticSearch'
 import AskQuestion from './pages/AskQuestion'
+import Chat from './pages/Chat'
 import ChatHistory from './pages/ChatHistory'
 import Settings from './pages/Settings'
 import Login from './pages/auth/Login'
@@ -52,10 +53,12 @@ export default function App() {
             <Route path="documents"                 element={<Documents />} />
             <Route path="documents/:id/preview"     element={<DocumentPreview />} />
             <Route path="upload"                    element={<Upload />} />
+            <Route path="chat"                      element={<Chat />} />
+            <Route path="chat/:conversationId"      element={<Chat />} />
             <Route path="ask"                       element={<AskQuestion />} />
             <Route path="research"                  element={<AiResearch />} />
             <Route path="search"                    element={<SemanticSearch />} />
-            <Route path="chat-history"              element={<ChatHistory />} />
+            <Route path="chat-history"              element={<Navigate to="/chat" replace />} />
             <Route path="settings"                  element={<Settings />} />
           </Route>
 

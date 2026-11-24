@@ -2,7 +2,7 @@
 
 > An AI-powered Legal Document Research Assistant built with FastAPI and React.
 
-LegalDoc AI enables legal professionals to upload documents and perform semantic AI-powered research using a Retrieval-Augmented Generation (RAG) pipeline backed by Google Gemini.
+LegalDoc AI enables legal professionals to upload documents and perform semantic AI-powered research using a Retrieval-Augmented Generation (RAG) pipeline backed by Groq (openai/gpt-oss-120b).
 
 ---
 
@@ -13,7 +13,7 @@ LegalDoc AI enables legal professionals to upload documents and perform semantic
 | Frontend   | React 18, Vite, Tailwind CSS v3, React Router, Axios, Lucide  |
 | Backend    | Python, FastAPI, Uvicorn, SQLAlchemy, SQLite                   |
 | Auth       | JWT (HTTP-only cookies), Argon2 password hashing, Google OAuth |
-| AI / RAG   | LangChain, Gemini API, Sentence Transformers, ChromaDB, PyMuPDF *(planned)* |
+| AI / RAG   | Groq API (`openai/gpt-oss-120b`), Sentence Transformers (`all-MiniLM-L6-v2`), ChromaDB, PyMuPDF |
 
 ---
 
@@ -77,13 +77,14 @@ cp .env.example backend/.env
 
 Required variables:
 
-| Variable           | Description                              |
-|--------------------|------------------------------------------|
-| `GEMINI_API_KEY`   | Google Gemini API key                    |
-| `GOOGLE_CLIENT_ID` | Google OAuth client ID                   |
-| `JWT_SECRET_KEY`   | Long random secret for JWT signing       |
+| Variable           | Description                                      |
+|--------------------|--------------------------------------------------|
+| `GROQ_API_KEY`     | Groq API key (free Developer tier: console.groq.com/keys) |
+| `GROQ_MODEL`       | Groq model (default: `openai/gpt-oss-120b`)      |
+| `GOOGLE_CLIENT_ID` | Google OAuth client ID                           |
+| `JWT_SECRET_KEY`   | Long random secret for JWT signing               |
 | `DATABASE_URL`     | SQLite path (default: `sqlite:///./legaldoc.db`) |
-| `FRONTEND_URL`     | CORS origin (default: `http://localhost:5173`) |
+| `FRONTEND_URL`     | CORS origin (default: `http://localhost:5173`)   |
 
 Generate a JWT secret:
 ```bash
@@ -153,20 +154,18 @@ Interactive docs: **http://localhost:8000/api/docs**
 
 ---
 
-## Planned Features
+## Features Implemented
 
-- [ ] Document upload endpoint with file storage
-- [ ] PDF/DOCX text extraction (PyMuPDF)
-- [ ] Vector embeddings with Sentence Transformers
-- [ ] ChromaDB vector store integration
-- [ ] RAG pipeline with LangChain + Gemini
-- [ ] AI Research chat interface
-- [ ] Document management (list, delete, rename)
-- [ ] Chat history persistence
-- [ ] Email verification flow
-- [ ] Refresh token rotation
-- [ ] User profile management
-- [ ] Admin dashboard
+- [x] Document upload with duplicate prevention and storage
+- [x] PDF text extraction (PyMuPDF) with page-wise chunking
+- [x] Vector embeddings with Sentence Transformers (`all-MiniLM-L6-v2`)
+- [x] Persistent ChromaDB vector store integration
+- [x] Grounded RAG pipeline with Groq (`openai/gpt-oss-120b`)
+- [x] Interactive Legal Chatbot with multi-turn conversation history
+- [x] Real-time token streaming with Server-Sent Events (SSE)
+- [x] Grounded source citations (`[S1]`, `[S2]`) with direct PDF page preview links
+- [x] Document management (upload, list, preview, download, delete)
+- [x] Email/password and Google OAuth authentication with HTTP-only cookies
 
 ---
 

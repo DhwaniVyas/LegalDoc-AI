@@ -19,9 +19,9 @@ const navItems = [
   { to: '/dashboard',    label: 'Dashboard',             icon: LayoutDashboard },
   { to: '/documents',    label: 'Documents',             icon: FileText },
   { to: '/upload',       label: 'Upload',                icon: Upload },
-  { to: '/ask',          label: 'Ask AI (RAG)',          icon: Sparkles },
+  { to: '/chat',         label: 'Legal Chatbot',         icon: MessageSquare },
+  { to: '/ask',          label: 'Quick RAG Ask',         icon: Sparkles },
   { to: '/search',       label: 'Semantic Search',       icon: Search },
-  { to: '/chat-history', label: 'Chat History',          icon: MessageSquare },
 ]
 
 const bottomItems = [

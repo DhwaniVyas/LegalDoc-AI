@@ -1,12 +1,17 @@
 """
 Application configuration – reads from .env using pydantic-settings.
 """
+from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
+_ENV_PATH = _BACKEND_DIR / ".env"
+_DEFAULT_DB_PATH = (_BACKEND_DIR / "legaldoc.db").as_posix()
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=[str(_ENV_PATH), ".env"],
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
@@ -17,7 +22,7 @@ class Settings(BaseSettings):
     DEBUG: bool = False
 
     # Database
-    DATABASE_URL: str = "sqlite:///./legaldoc.db"
+    DATABASE_URL: str = f"sqlite:///{_DEFAULT_DB_PATH}"
 
     # Auth – JWT
     JWT_SECRET_KEY: str = "change-me-in-production"
@@ -33,7 +38,14 @@ class Settings(BaseSettings):
     # Google OAuth
     GOOGLE_CLIENT_ID: str = ""
 
-    # AI
+    # AI / LLM (Groq via OpenAI-compatible API)
+    GROQ_API_KEY: str = ""
+    GROQ_MODEL: str = "openai/gpt-oss-120b"
+    GROQ_BASE_URL: str = "https://api.groq.com/openai/v1"
+    GROQ_TIMEOUT_SECONDS: int = 45
+    GROQ_MAX_RETRIES: int = 2
+
+    # Legacy Gemini settings (retained for backward compatibility during migration)
     GEMINI_API_KEY: str = ""
     GEMINI_MODEL: str = "gemini-3.8-flash"
     GEMINI_TIMEOUT_SECONDS: int = 30

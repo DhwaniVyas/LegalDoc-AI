@@ -1,5 +1,5 @@
 """
-QA Route – Grounded legal question answering via Gemini RAG pipeline.
+QA Route – Grounded legal question answering via Groq RAG pipeline.
 Supports both standard JSON response and progressive SSE streaming.
 """
 import json
@@ -12,7 +12,7 @@ from app.core.dependencies import get_current_user
 from app.database import models
 from app.database.session import get_db
 from app.schemas.qa import AskQuestionRequest, AskQuestionResponse
-from app.services import gemini_service, rag_service
+from app.services import groq_service, rag_service
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,7 @@ def ask_question(
     Ask a question grounded in the user's indexed legal documents.
     1. Validates input & verifies document ownership if scoped.
     2. Retrieves relevant chunks via ChromaDB.
-    3. Prompts Gemini with strict citation and evidence grounding rules.
+    3. Prompts Groq with strict citation and evidence grounding rules.
     4. Validates and sanitizes inline citations [S1], [S2]...
     """
     clean_q = request.question.strip()
@@ -63,8 +63,8 @@ def ask_question(
         )
         return AskQuestionResponse(**result)
 
-    except gemini_service.GeminiServiceError as e:
-        logger.error("Gemini service error (%s): %s", type(e).__name__, e.message)
+    except groq_service.GroqServiceError as e:
+        logger.error("Groq service error (%s): %s", type(e).__name__, e.message)
         raise HTTPException(
             status_code=e.status_code,
             detail=e.detail,

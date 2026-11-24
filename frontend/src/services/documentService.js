@@ -148,7 +148,7 @@ export const documentService = {
   },
 
   /**
-   * Ask grounded question via Gemini RAG pipeline (standard JSON response).
+   * Ask grounded question via Groq RAG pipeline (standard JSON response).
    */
   askQuestion: ({ question, documentId = null } = {}) => {
     return api.post('/qa/ask', {
