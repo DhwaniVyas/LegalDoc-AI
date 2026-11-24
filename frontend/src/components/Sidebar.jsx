@@ -5,6 +5,7 @@ import {
   FileText,
   Upload,
   Search,
+  Sparkles,
   MessageSquare,
   Settings,
   Scale,
@@ -15,11 +16,12 @@ import {
 import { useAuth } from '../context/AuthContext'
 
 const navItems = [
-  { to: '/dashboard',    label: 'Dashboard',    icon: LayoutDashboard },
-  { to: '/documents',    label: 'Documents',    icon: FileText },
-  { to: '/upload',       label: 'Upload',       icon: Upload },
-  { to: '/research',     label: 'AI Research',  icon: Search },
-  { to: '/chat-history', label: 'Chat History', icon: MessageSquare },
+  { to: '/dashboard',    label: 'Dashboard',             icon: LayoutDashboard },
+  { to: '/documents',    label: 'Documents',             icon: FileText },
+  { to: '/upload',       label: 'Upload',                icon: Upload },
+  { to: '/ask',          label: 'Ask AI (RAG)',          icon: Sparkles },
+  { to: '/search',       label: 'Semantic Search',       icon: Search },
+  { to: '/chat-history', label: 'Chat History',          icon: MessageSquare },
 ]
 
 const bottomItems = [

@@ -11,7 +11,7 @@ from slowapi.errors import RateLimitExceeded
 from app.core.config import settings
 from app.database.session import engine
 from app.database import models
-from app.routes import health, auth, users, documents, search
+from app.routes import health, auth, users, documents, search, qa
 
 # Create all database tables on startup
 models.Base.metadata.create_all(bind=engine)
@@ -45,3 +45,4 @@ app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(users.router, prefix="/api/users", tags=["Users"])
 app.include_router(documents.router, prefix="/api/documents", tags=["Documents"])
 app.include_router(search.router, prefix="/api/search", tags=["Search"])
+app.include_router(qa.router, prefix="/api/qa", tags=["Question Answering"])

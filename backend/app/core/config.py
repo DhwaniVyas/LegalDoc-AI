@@ -35,6 +35,9 @@ class Settings(BaseSettings):
 
     # AI
     GEMINI_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-3.8-flash"
+    GEMINI_TIMEOUT_SECONDS: int = 30
+    RAG_TOP_K: int = 6
 
     # CORS
     FRONTEND_URL: str = "http://localhost:5173"

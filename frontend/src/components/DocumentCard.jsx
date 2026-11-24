@@ -111,6 +111,15 @@ export default function DocumentCard({ document, onDownload, onDelete, onInspect
             <Layers size={13} />
             Inspect
           </button>
+          <span className="text-slate-300">·</span>
+          <Link
+            to={`/ask?document_id=${document.id}`}
+            className="inline-flex items-center gap-1 text-xs font-medium text-purple-700 hover:text-purple-900 hover:underline"
+            title="Ask AI questions about this document"
+          >
+            <Sparkles size={13} />
+            Ask
+          </Link>
         </div>
 
         <div className="flex items-center gap-1">

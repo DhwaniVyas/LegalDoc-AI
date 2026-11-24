@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react'
-import { useParams, Link, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Download, FileText, AlertCircle, Loader2, HardDrive, Calendar } from 'lucide-react'
+import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { ArrowLeft, Download, FileText, AlertCircle, Loader2, HardDrive, Calendar, Sparkles } from 'lucide-react'
 import { documentService, formatFileSize, formatDate } from '../services/documentService'
 import LoadingSpinner from '../components/LoadingSpinner'
 
 export default function DocumentPreview() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const pageParam = searchParams.get('page')
 
   const [document, setDocument] = useState(null)
   const [blobUrl, setBlobUrl] = useState(null)
@@ -136,6 +138,16 @@ export default function DocumentPreview() {
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          {document && (
+            <Link
+              to={`/ask?document_id=${document.id}`}
+              className="btn-secondary inline-flex items-center gap-1.5 text-xs py-2 px-3 text-navy-700 hover:text-navy-900 border-navy-200"
+              title="Ask questions grounded in this document"
+            >
+              <Sparkles size={14} className="text-navy-600" />
+              <span>Ask AI</span>
+            </Link>
+          )}
           <button
             onClick={handleDownload}
             disabled={downloading}
@@ -151,7 +163,7 @@ export default function DocumentPreview() {
       <div className="flex-1 p-4 overflow-hidden flex flex-col">
         {blobUrl ? (
           <iframe
-            src={blobUrl}
+            src={pageParam ? `${blobUrl}#page=${pageParam}` : blobUrl}
             title={document?.original_filename || 'PDF Preview'}
             className="w-full h-full rounded-xl border border-slate-200 bg-white shadow-sm"
           />

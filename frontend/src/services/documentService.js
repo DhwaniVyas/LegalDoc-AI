@@ -146,4 +146,14 @@ export const documentService = {
       top_k: Number(topK) || 5,
     }).then((res) => res.data)
   },
+
+  /**
+   * Ask grounded question via Gemini RAG pipeline.
+   */
+  askQuestion: ({ question, documentId = null } = {}) => {
+    return api.post('/qa/ask', {
+      question,
+      document_id: documentId || null,
+    }).then((res) => res.data)
+  },
 }

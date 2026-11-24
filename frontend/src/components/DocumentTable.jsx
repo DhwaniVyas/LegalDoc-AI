@@ -119,6 +119,13 @@ export default function DocumentTable({ documents, onDownload, onDelete, onInspe
                           <Database size={15} />
                         </button>
                       )}
+                      <Link
+                        to={`/ask?document_id=${doc.id}`}
+                        className="btn-ghost p-1.5 text-purple-600 hover:text-purple-800 hover:bg-purple-50"
+                        title="Ask AI questions about this document"
+                      >
+                        <Sparkles size={15} />
+                      </Link>
                       <button
                         onClick={() => onInspect(doc)}
                         className="btn-ghost p-1.5 text-slate-600 hover:text-navy-800 hover:bg-slate-100"
