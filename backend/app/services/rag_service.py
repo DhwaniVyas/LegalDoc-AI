@@ -134,13 +134,13 @@ def expand_legal_queries(question: str) -> List[str]:
 
     and_match = re.search(r"articles?\s+(\d+[a-z]?)\s+(?:and|&)\s+(\d+[a-z]?)", lowered)
     if and_match:
-        queries.append(f"Article {and_match.group(1)}")
-        queries.append(f"Article {and_match.group(2)}")
+        queries.append(f"Article {and_match.group(1)} provision clause")
+        queries.append(f"Article {and_match.group(2)} provision clause")
 
     # 3. Extract single Article/Section mentions if not already added
-    single_arts = re.findall(r"\b(?:article|section)\s+(\d+[a-z]?)\b", lowered)
+    single_arts = re.findall(r"\b(?:articles?|sections?)\s+(\d+[a-z]?)\b", lowered)
     for art in single_arts[:4]:
-        art_q = f"Article {art}"
+        art_q = f"Article {art} provision clause"
         if art_q not in queries:
             queries.append(art_q)
 
@@ -158,7 +158,7 @@ def expand_legal_queries(question: str) -> List[str]:
 
 def is_noise_chunk(content: str) -> bool:
     """
-    Identify and filter out pure headers, document title blocks, or isolated footnotes
+    Identify and filter out pure headers, table of contents lists, or isolated footnotes
     that contain no substantive legal clauses.
     """
     text = content.strip()
@@ -170,6 +170,10 @@ def is_noise_chunk(content: str) -> bool:
     if len(lines) <= 3 and any("the constitution of india" in line.lower() for line in lines):
         if not any(k in text.lower() for k in ["shall", "right", "law", "article", "section", "person", "citizen"]):
             return True
+
+    # Table of contents index entries like "(iii)\nARTICLES\nContents"
+    if "articles\ncontents" in text.lower() or "articles \ncontents" in text.lower():
+        return True
 
     return False
 
@@ -385,7 +389,7 @@ def retrieve_and_prepare_sources(
         seen_chunks: Dict[Tuple[str, int], Dict[str, Any]] = {}
 
         for i, (sub_q, emb) in enumerate(zip(subqueries, query_embeddings)):
-            per_query_k = k if i == 0 else min(5, max(3, k // 3))
+            per_query_k = max(k, 15) if i == 0 else min(10, max(5, k // 2))
             raw_results = vector_store_service.query_semantic_chunks(
                 user_id=user_id,
                 query_embedding=emb,
@@ -398,6 +402,47 @@ def retrieve_and_prepare_sources(
                 key = (c["document_id"], c["chunk_index"])
                 if key not in seen_chunks or c["distance"] < seen_chunks[key]["distance"]:
                     seen_chunks[key] = c
+
+        # Targeted provision lookup for explicit article/section numbers
+        # e.g., "Article 14", "Articles 14 and 15", "Section 9"
+        mentioned_articles = set()
+        for m in re.finditer(r"\b(?:articles?|sections?)\s+(\d+[a-z]?)(?:\s*(?:and|,|&)\s*(\d+[a-z]?))?", question.lower()):
+            if m.group(1):
+                mentioned_articles.add(m.group(1))
+            if m.group(2):
+                mentioned_articles.add(m.group(2))
+        if mentioned_articles:
+            doc_filter = [models.Document.user_id == user_id]
+            if document_id:
+                doc_filter.append(models.DocumentChunk.document_id == document_id)
+
+            for art_num in mentioned_articles:
+                exact_matches = (
+                    db.query(models.DocumentChunk)
+                    .join(models.Document, models.Document.id == models.DocumentChunk.document_id)
+                    .filter(
+                        *doc_filter,
+                        (models.DocumentChunk.content.ilike(f"%{art_num}. %") | 
+                         models.DocumentChunk.content.ilike(f"%Article {art_num}%"))
+                    )
+                    .order_by(models.DocumentChunk.chunk_index)
+                    .limit(3)
+                    .all()
+                )
+                for em in exact_matches:
+                    if is_noise_chunk(em.content):
+                        continue
+                    key = (em.document_id, em.chunk_index)
+                    if key not in seen_chunks:
+                        seen_chunks[key] = {
+                            "chunk_id": em.id,
+                            "document_id": em.document_id,
+                            "filename": em.document.original_filename if em.document else "",
+                            "page_number": em.page_number,
+                            "chunk_index": em.chunk_index,
+                            "content": em.content,
+                            "distance": 0.40,  # Relevant exact provision match
+                        }
 
         candidate_chunks = list(seen_chunks.values())
         t_retrieval_end = time.perf_counter()
@@ -420,8 +465,8 @@ def retrieve_and_prepare_sources(
         )
         t_adj_end = time.perf_counter()
 
-        # Step 5: Sort chunks logically by document and chunk_index
-        expanded_chunks.sort(key=lambda c: (c["document_id"], c["chunk_index"]))
+        # Step 5: Sort chunks by semantic relevance (lowest distance first), grouping contiguous chunks
+        expanded_chunks.sort(key=lambda c: (c.get("distance", 1.0), c["chunk_index"]))
 
         # Bound total sources to prevent excessive context
         selected_chunks = expanded_chunks[:25]
