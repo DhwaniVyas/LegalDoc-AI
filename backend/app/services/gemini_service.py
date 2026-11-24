@@ -7,7 +7,7 @@ import logging
 import random
 import threading
 import time
-from typing import Optional
+from typing import Iterator, Optional
 
 from google import genai
 from google.genai import types, errors
@@ -281,7 +281,7 @@ def generate_content(
         system_instruction=system_instruction,
         temperature=0.2,       # Low temperature for factual grounding
         top_p=0.95,
-        max_output_tokens=2048,
+        max_output_tokens=8192,
     )
 
     last_error: Optional[Exception] = None
@@ -353,3 +353,87 @@ def generate_content(
     if last_error:
         _raise_categorized_gemini_error(last_error, model_name=model_name, attempts=MAX_TOTAL_ATTEMPTS)
     raise GeminiAPIError("Failed to generate answer from Gemini after retries.", status_code=502)
+
+
+def generate_content_stream(
+    prompt: str,
+    system_instruction: Optional[str] = None,
+    model: Optional[str] = None,
+    timeout_seconds: Optional[int] = None,
+) -> Iterator[str]:
+    """
+    Stream answer tokens progressively from Gemini with bounded exponential backoff on initial connection.
+    Yields text chunks as they arrive.
+    """
+    client = get_gemini_client()
+    model_name = model or settings.GEMINI_MODEL or "gemini-3.8-flash"
+
+    config = types.GenerateContentConfig(
+        system_instruction=system_instruction,
+        temperature=0.2,
+        top_p=0.95,
+        max_output_tokens=8192,
+    )
+
+    last_error: Optional[Exception] = None
+
+    for attempt in range(1, MAX_TOTAL_ATTEMPTS + 1):
+        try:
+            logger.info(
+                "Streaming from Gemini model '%s' (attempt %d/%d)",
+                model_name,
+                attempt,
+                MAX_TOTAL_ATTEMPTS,
+            )
+            stream = client.models.generate_content_stream(
+                model=model_name,
+                contents=prompt,
+                config=config,
+            )
+            for chunk in stream:
+                if chunk and chunk.text:
+                    yield chunk.text
+            return
+
+        except Exception as exc:
+            last_error = exc
+            is_transient = _is_transient_error(exc)
+            code = getattr(exc, "code", None)
+            err_msg = str(exc)
+
+            if not is_transient:
+                logger.error(
+                    "Gemini non-retryable streaming error on attempt %d/%d (code: %s, model: %s): %s",
+                    attempt,
+                    MAX_TOTAL_ATTEMPTS,
+                    code,
+                    model_name,
+                    err_msg,
+                )
+                _raise_categorized_gemini_error(exc, model_name=model_name, attempts=attempt)
+
+            if attempt >= MAX_TOTAL_ATTEMPTS:
+                logger.error(
+                    "Gemini transient streaming error retries exhausted after %d attempts (code: %s): %s",
+                    attempt,
+                    code,
+                    err_msg,
+                )
+                _raise_categorized_gemini_error(exc, model_name=model_name, attempts=attempt)
+
+            retry_after = _extract_retry_after(exc)
+            delay = _calculate_backoff_delay(attempt, retry_after=retry_after)
+            logger.warning(
+                "Gemini transient streaming error on attempt %d/%d (code: %s): %s. Retrying in %.2fs...",
+                attempt,
+                MAX_TOTAL_ATTEMPTS,
+                code,
+                err_msg,
+                delay,
+            )
+            time.sleep(delay)
+
+    if last_error:
+        _raise_categorized_gemini_error(last_error, model_name=model_name, attempts=MAX_TOTAL_ATTEMPTS)
+    raise GeminiAPIError("Failed to stream answer from Gemini after retries.", status_code=502)
+

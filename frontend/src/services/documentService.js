@@ -148,12 +148,103 @@ export const documentService = {
   },
 
   /**
-   * Ask grounded question via Gemini RAG pipeline.
+   * Ask grounded question via Gemini RAG pipeline (standard JSON response).
    */
   askQuestion: ({ question, documentId = null } = {}) => {
     return api.post('/qa/ask', {
       question,
       document_id: documentId || null,
     }).then((res) => res.data)
+  },
+
+  /**
+   * Ask question with progressive SSE streaming.
+   * Emits callbacks: onSources(sources, timings), onDelta(textChunk), onDone(finalData), onError(err, statusCode)
+   */
+  askQuestionStream: async ({
+    question,
+    documentId = null,
+    onSources,
+    onDelta,
+    onDone,
+    onError,
+    signal,
+  } = {}) => {
+    try {
+      const response = await fetch('/api/qa/ask-stream', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          question,
+          document_id: documentId || null,
+        }),
+        signal,
+      })
+
+      if (!response.ok) {
+        let errorDetail = 'Failed to stream answer.'
+        try {
+          const errData = await response.json()
+          errorDetail = errData.detail || errorDetail
+        } catch {
+          errorDetail = `Server error ${response.status}: ${response.statusText}`
+        }
+        if (onError) onError(new Error(errorDetail), response.status)
+        return
+      }
+
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder('utf-8')
+      let buffer = ''
+
+      while (true) {
+        const { value, done } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const events = buffer.split('\n\n')
+        buffer = events.pop() || ''
+
+        for (const evtBlock of events) {
+          if (!evtBlock.trim()) continue
+          const lines = evtBlock.split('\n')
+          let eventName = 'message'
+          let dataStr = ''
+
+          for (const line of lines) {
+            if (line.startsWith('event: ')) {
+              eventName = line.substring(7).trim()
+            } else if (line.startsWith('data: ')) {
+              dataStr = line.substring(6)
+            }
+          }
+
+          if (!dataStr) continue
+          let parsedData = {}
+          try {
+            parsedData = JSON.parse(dataStr)
+          } catch {
+            parsedData = { text: dataStr }
+          }
+
+          if (eventName === 'sources' && onSources) {
+            onSources(parsedData.sources || [], parsedData.timings || {})
+          } else if (eventName === 'delta' && onDelta) {
+            onDelta(parsedData.text || '')
+          } else if (eventName === 'done' && onDone) {
+            onDone(parsedData)
+          } else if (eventName === 'error' && onError) {
+            onError(new Error(parsedData.detail || 'Streaming error'), parsedData.status_code || 500)
+          }
+        }
+      }
+    } catch (err) {
+      if (err.name !== 'AbortError' && onError) {
+        onError(err, 500)
+      }
+    }
   },
 }

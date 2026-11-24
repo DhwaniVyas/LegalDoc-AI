@@ -4,8 +4,14 @@ Model: all-MiniLM-L6-v2 (384-dimensional dense vector embeddings).
 Runs locally on CPU; no external API key required.
 """
 import logging
+import os
 import threading
 from typing import List, Optional
+
+# Enforce offline mode for SentenceTransformers so cached weights load instantly
+# without attempting external HuggingFace network handshakes (avoids 40s timeout)
+os.environ.setdefault("HF_HUB_OFFLINE", "1")
+os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 
 logger = logging.getLogger(__name__)
 

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
   Sparkles,
@@ -16,18 +16,156 @@ import {
   ShieldCheck,
   FileQuestion,
   RotateCw,
+  Clock,
+  Zap,
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import EmptyState from '../components/EmptyState'
 import { documentService } from '../services/documentService'
 
 const EXAMPLE_QUESTIONS = [
+  'Explain the Right to Equality under the Constitution of India.',
+  'What are the prohibited grounds of discrimination under Article 15?',
+  'Explain equality of opportunity in public employment under Article 16.',
+  'Compare Articles 14 and 15 in detail.',
   'What constitutes a material breach and what are the remedies?',
-  'What are the required termination notice periods and conditions?',
-  'What is the limitation of liability or maximum cap on damages?',
-  'What confidentiality obligations and exclusions are specified?',
-  'What is the governing law and agreed dispute resolution forum?',
 ]
+
+// Render markdown inline text with bolding and interactive citation badges
+function renderInlineContent(text, scrollToSource) {
+  if (!text) return null
+  const tokens = text.split(/(\[S\d+\]|\*\*.*?\*\*)/g)
+  return tokens.map((token, idx) => {
+    const cidMatch = token.match(/^\[(S\d+)\]$/)
+    if (cidMatch) {
+      const cid = cidMatch[1]
+      return (
+        <button
+          key={idx}
+          type="button"
+          onClick={() => scrollToSource(cid)}
+          className="inline-flex items-center px-1.5 py-0.5 mx-0.5 rounded text-[11px] font-semibold bg-navy-100 text-navy-800 hover:bg-navy-200 transition-colors cursor-pointer border border-navy-200 align-baseline"
+          title={`Jump to Source [${cid}]`}
+        >
+          [{cid}]
+        </button>
+      )
+    }
+    const boldMatch = token.match(/^\*\*(.*?)\*\*$/)
+    if (boldMatch) {
+      return (
+        <strong key={idx} className="font-semibold text-slate-900">
+          {renderInlineContent(boldMatch[1], scrollToSource)}
+        </strong>
+      )
+    }
+    return <span key={idx}>{token}</span>
+  })
+}
+
+// Full structured legal answer renderer (Headings, Lists, Paragraphs, Citations)
+function FormattedLegalAnswer({ text, scrollToSource, isStreaming }) {
+  if (!text) return null
+
+  const lines = text.split('\n')
+  const elements = []
+  let listItems = []
+  let listType = null
+
+  const flushList = (key) => {
+    if (listItems.length === 0) return
+    if (listType === 'ol') {
+      elements.push(
+        <ol key={`list-${key}`} className="list-decimal pl-6 my-2 space-y-1.5 text-slate-800 text-sm">
+          {listItems.map((item, i) => (
+            <li key={i}>{renderInlineContent(item, scrollToSource)}</li>
+          ))}
+        </ol>
+      )
+    } else {
+      elements.push(
+        <ul key={`list-${key}`} className="list-disc pl-6 my-2 space-y-1.5 text-slate-800 text-sm">
+          {listItems.map((item, i) => (
+            <li key={i}>{renderInlineContent(item, scrollToSource)}</li>
+          ))}
+        </ul>
+      )
+    }
+    listItems = []
+    listType = null
+  }
+
+  lines.forEach((line, idx) => {
+    const trimmed = line.trim()
+
+    if (trimmed.startsWith('### ')) {
+      flushList(idx)
+      elements.push(
+        <h3 key={idx} className="text-base font-bold text-slate-900 mt-4 mb-2 pb-1 border-b border-slate-100">
+          {renderInlineContent(trimmed.substring(4), scrollToSource)}
+        </h3>
+      )
+      return
+    }
+    if (trimmed.startsWith('## ')) {
+      flushList(idx)
+      elements.push(
+        <h2 key={idx} className="text-lg font-bold text-slate-900 mt-5 mb-2 pb-1 border-b border-slate-200">
+          {renderInlineContent(trimmed.substring(3), scrollToSource)}
+        </h2>
+      )
+      return
+    }
+    if (trimmed.startsWith('# ')) {
+      flushList(idx)
+      elements.push(
+        <h1 key={idx} className="text-xl font-bold text-slate-900 mt-6 mb-2">
+          {renderInlineContent(trimmed.substring(2), scrollToSource)}
+        </h1>
+      )
+      return
+    }
+
+    const numMatch = trimmed.match(/^(\d+)\.\s+(.*)/)
+    if (numMatch) {
+      if (listType && listType !== 'ol') flushList(idx)
+      listType = 'ol'
+      listItems.push(numMatch[2])
+      return
+    }
+
+    const bulletMatch = trimmed.match(/^[-*]\s+(.*)/)
+    if (bulletMatch) {
+      if (listType && listType !== 'ul') flushList(idx)
+      listType = 'ul'
+      listItems.push(bulletMatch[1])
+      return
+    }
+
+    if (!trimmed) {
+      flushList(idx)
+      return
+    }
+
+    flushList(idx)
+    elements.push(
+      <p key={idx} className="text-sm leading-relaxed text-slate-800 my-2">
+        {renderInlineContent(line, scrollToSource)}
+      </p>
+    )
+  })
+
+  flushList('final')
+
+  return (
+    <div className="space-y-1">
+      {elements}
+      {isStreaming && (
+        <span className="inline-block w-2 h-4 bg-navy-600 animate-pulse ml-1 align-middle" />
+      )}
+    </div>
+  )
+}
 
 export default function AskQuestion() {
   const [searchParams] = useSearchParams()
@@ -38,12 +176,17 @@ export default function AskQuestion() {
   const [documents, setDocuments] = useState([])
   const [loadingDocs, setLoadingDocs] = useState(true)
 
-  // QA Request state
+  // QA Request & Streaming state
   const [asking, setAsking] = useState(false)
+  const [isStreaming, setIsStreaming] = useState(false)
+  const [useStreaming, setUseStreaming] = useState(true)
+  const [stageMessage, setStageMessage] = useState('')
   const [qaError, setQaError] = useState('')
   const [qaErrorStatus, setQaErrorStatus] = useState(null)
   const [qaResponse, setQaResponse] = useState(null)
   const [hasAsked, setHasAsked] = useState(false)
+
+  const abortControllerRef = useRef(null)
 
   // Load user's indexed documents
   useEffect(() => {
@@ -72,21 +215,77 @@ export default function AskQuestion() {
     setAsking(true)
     setQaError('')
     setQaErrorStatus(null)
-    try {
-      const res = await documentService.askQuestion({
+
+    if (useStreaming) {
+      setIsStreaming(true)
+      setStageMessage('Searching indexed documents and expanding adjacent legal provisions...')
+      abortControllerRef.current = new AbortController()
+
+      let currentSources = []
+
+      await documentService.askQuestionStream({
         question: cleanQ,
         documentId: selectedDocId || null,
+        signal: abortControllerRef.current.signal,
+        onSources: (sources, timings) => {
+          currentSources = sources
+          setStageMessage('Generating grounded legal analysis with Gemini...')
+          setQaResponse({
+            question: cleanQ,
+            answer: '',
+            sources,
+            timings,
+            status: 'answered',
+          })
+          setHasAsked(true)
+        },
+        onDelta: (textChunk) => {
+          setStageMessage('')
+          setQaResponse((prev) => ({
+            ...prev,
+            answer: (prev?.answer || '') + textChunk,
+          }))
+        },
+        onDone: (finalData) => {
+          setIsStreaming(false)
+          setAsking(false)
+          setStageMessage('')
+          setQaResponse((prev) => ({
+            ...prev,
+            answer: finalData.answer,
+            status: finalData.status,
+            sources: currentSources.length > 0 ? currentSources : (prev?.sources || []),
+            timings: finalData.timings,
+          }))
+        },
+        onError: (err, status) => {
+          setIsStreaming(false)
+          setAsking(false)
+          setStageMessage('')
+          setQaErrorStatus(status || 500)
+          setQaError(err.message || 'Failed to generate answer. Please try again.')
+        },
       })
-      setQaResponse(res)
-      setHasAsked(true)
-    } catch (err) {
-      setQaErrorStatus(err.response?.status || 500)
-      setQaError(
-        err.response?.data?.detail ||
-          'Failed to generate answer. Please verify your connection and try again.'
-      )
-    } finally {
-      setAsking(false)
+    } else {
+      // Non-streaming fallback
+      try {
+        setStageMessage('Researching documents and generating grounded answer...')
+        const res = await documentService.askQuestion({
+          question: cleanQ,
+          documentId: selectedDocId || null,
+        })
+        setQaResponse(res)
+        setHasAsked(true)
+      } catch (err) {
+        setQaErrorStatus(err.response?.status || 500)
+        setQaError(
+          err.response?.data?.detail ||
+            'Failed to generate answer. Please verify your connection and try again.'
+        )
+      } finally {
+        setAsking(false)
+        setStageMessage('')
+      }
     }
   }
 
@@ -104,30 +303,6 @@ export default function AskQuestion() {
       el.classList.add('ring-2', 'ring-navy-600')
       setTimeout(() => el.classList.remove('ring-2', 'ring-navy-600'), 2500)
     }
-  }
-
-  // Render inline citation tags [S1] as interactive clickable badges
-  const renderFormattedAnswer = (text) => {
-    if (!text) return null
-    const parts = text.split(/(\[S\d+\])/g)
-    return parts.map((part, index) => {
-      const match = part.match(/^\[(S\d+)\]$/)
-      if (match) {
-        const cid = match[1]
-        return (
-          <button
-            key={index}
-            type="button"
-            onClick={() => scrollToSource(cid)}
-            className="inline-flex items-center px-1.5 py-0.5 mx-0.5 rounded text-[11px] font-semibold bg-navy-100 text-navy-800 hover:bg-navy-200 transition-colors cursor-pointer border border-navy-200 align-baseline"
-            title={`Jump to Source [${cid}]`}
-          >
-            [{cid}]
-          </button>
-        )
-      }
-      return <span key={index}>{part}</span>
-    })
   }
 
   const getStatusBadge = (status) => {
@@ -161,7 +336,7 @@ export default function AskQuestion() {
     <div className="p-8 max-w-5xl mx-auto space-y-6">
       <PageHeader
         title="AI Legal Question Answering"
-        subtitle="Ask questions grounded strictly in your indexed legal documents, powered by semantic retrieval and Google Gemini."
+        subtitle="Ask complex legal questions grounded strictly in your indexed documents, powered by multi-aspect semantic retrieval, contiguous clause expansion, and Gemini 3.8."
       />
 
       {/* Privacy Notice Banner */}
@@ -169,10 +344,10 @@ export default function AskQuestion() {
         <Info size={18} className="text-navy-600 shrink-0 mt-0.5" />
         <div className="space-y-1">
           <p className="font-semibold text-slate-800">
-            Privacy & Grounding Notice
+            Privacy & Grounding Guarantee
           </p>
           <p>
-            Relevant extracted text passages from your indexed documents are retrieved via local vector embeddings and sent to Google Gemini to formulate answers. Responses are grounded strictly in your files and do not constitute formal legal counsel.
+            Relevant extracted text passages from your indexed documents are retrieved via local vector embeddings, enriched with adjacent provisions, and passed to Gemini. Responses are grounded strictly in your files and do not constitute formal legal counsel.
           </p>
         </div>
       </div>
@@ -218,31 +393,46 @@ export default function AskQuestion() {
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="E.g., What are the terms for contract termination, and what notice period must be provided?"
+              placeholder="E.g., Explain the Right to Equality under the Constitution of India, covering Articles 14 through 18."
               className="w-full px-4 py-3 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-navy-600 focus:border-transparent text-sm resize-none"
             />
           </div>
 
           {/* Form Actions & Scope Filter */}
           <div className="flex flex-wrap items-center justify-between gap-4 pt-2 border-t border-slate-100">
-            {/* Scope Filter */}
-            <div className="flex items-center gap-2">
-              <label htmlFor="qa-scope" className="text-xs font-medium text-slate-600">
-                Document Scope:
+            {/* Scope Filter & Streaming Toggle */}
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex items-center gap-2">
+                <label htmlFor="qa-scope" className="text-xs font-medium text-slate-600">
+                  Document Scope:
+                </label>
+                <select
+                  id="qa-scope"
+                  value={selectedDocId}
+                  onChange={(e) => setSelectedDocId(e.target.value)}
+                  className="text-xs py-1.5 px-3 rounded-lg border border-slate-300 bg-white text-slate-700 focus:outline-none focus:ring-1 focus:ring-navy-600 max-w-sm truncate"
+                >
+                  <option value="">All Indexed Documents ({indexedDocs.length})</option>
+                  {documents.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.original_filename} {d.embedding_status !== 'completed' ? '(Not Indexed)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={useStreaming}
+                  onChange={(e) => setUseStreaming(e.target.checked)}
+                  className="rounded text-navy-600 focus:ring-navy-500 h-3.5 w-3.5"
+                />
+                <span className="inline-flex items-center gap-1 font-medium">
+                  <Zap size={13} className="text-amber-500" />
+                  Real-time Progressive Streaming
+                </span>
               </label>
-              <select
-                id="qa-scope"
-                value={selectedDocId}
-                onChange={(e) => setSelectedDocId(e.target.value)}
-                className="text-xs py-1.5 px-3 rounded-lg border border-slate-300 bg-white text-slate-700 focus:outline-none focus:ring-1 focus:ring-navy-600 max-w-sm truncate"
-              >
-                <option value="">All Indexed Documents ({indexedDocs.length})</option>
-                {documents.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.original_filename} {d.embedding_status !== 'completed' ? '(Not Indexed)' : ''}
-                  </option>
-                ))}
-              </select>
             </div>
 
             {/* Ask Button */}
@@ -332,23 +522,23 @@ export default function AskQuestion() {
         </div>
       )}
 
-      {/* Loading State */}
-      {asking && (
-        <div className="card p-12 flex flex-col items-center justify-center text-center space-y-4 bg-white border border-slate-200 shadow-sm">
-          <Loader2 size={36} className="text-navy-600 animate-spin" />
+      {/* Loading State with Stage Status */}
+      {asking && stageMessage && (
+        <div className="card p-8 flex flex-col items-center justify-center text-center space-y-3 bg-white border border-slate-200 shadow-sm animate-pulse">
+          <Loader2 size={32} className="text-navy-600 animate-spin" />
           <div className="space-y-1">
-            <h3 className="font-semibold text-slate-800 text-base">
-              Analyzing Documents & Generating Answer
+            <h3 className="font-semibold text-slate-800 text-sm">
+              {stageMessage}
             </h3>
             <p className="text-xs text-slate-500 max-w-md">
-              Retrieving relevant clauses from ChromaDB, applying strict legal grounding rules, and verifying citations with Gemini Flash.
+              Executing multi-aspect vector retrieval, expanding adjacent statutory clauses, and generating grounded analysis.
             </p>
           </div>
         </div>
       )}
 
       {/* Answer & Sources Section */}
-      {!asking && hasAsked && qaResponse && (
+      {hasAsked && qaResponse && (
         <div className="space-y-6">
           {/* Answer Card */}
           <div className="card p-6 bg-white border border-slate-200 shadow-sm space-y-4">
@@ -359,7 +549,7 @@ export default function AskQuestion() {
                 </div>
                 <div>
                   <h2 className="text-sm font-semibold text-slate-900">
-                    Generated Answer
+                    Generated Legal Analysis
                   </h2>
                   <p className="text-[11px] text-slate-400">
                     Grounded in {qaResponse.sources?.length || 0} retrieved document passages
@@ -367,20 +557,50 @@ export default function AskQuestion() {
                 </div>
               </div>
 
-              {getStatusBadge(qaResponse.status)}
+              <div className="flex items-center gap-2">
+                {getStatusBadge(qaResponse.status)}
+              </div>
             </div>
 
-            {/* Answer Content */}
-            <div className="text-sm leading-relaxed text-slate-800 whitespace-pre-wrap font-sans space-y-2">
-              {renderFormattedAnswer(qaResponse.answer)}
+            {/* Answer Content rendered with formatted markdown */}
+            <div className="text-sm leading-relaxed text-slate-800 font-sans">
+              <FormattedLegalAnswer
+                text={qaResponse.answer}
+                scrollToSource={scrollToSource}
+                isStreaming={isStreaming}
+              />
             </div>
+
+            {/* Stage Timings Badge */}
+            {qaResponse.timings && (
+              <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center gap-3 text-[11px] text-slate-500 font-mono">
+                <span className="flex items-center gap-1 font-sans font-medium text-slate-600">
+                  <Clock size={12} className="text-navy-600" />
+                  Response Pipeline:
+                </span>
+                {qaResponse.timings.retrieval_ms !== undefined && (
+                  <span>Retrieval: {qaResponse.timings.retrieval_ms}ms</span>
+                )}
+                {qaResponse.timings.adjacent_expansion_ms !== undefined && (
+                  <span>Adjacent Expansion: {qaResponse.timings.adjacent_expansion_ms}ms</span>
+                )}
+                {qaResponse.timings.generation_ms !== undefined && (
+                  <span>Generation: {(qaResponse.timings.generation_ms / 1000).toFixed(1)}s</span>
+                )}
+                {qaResponse.timings.total_ms !== undefined && (
+                  <span className="font-semibold text-navy-800">
+                    Total: {(qaResponse.timings.total_ms / 1000).toFixed(1)}s
+                  </span>
+                )}
+              </div>
+            )}
 
             {/* Insufficient Evidence Guidance */}
             {qaResponse.status === 'insufficient_evidence' && (
               <div className="bg-amber-50/70 border border-amber-200/80 rounded-lg p-3 text-xs text-amber-800 flex items-start gap-2">
                 <Info size={16} className="text-amber-600 shrink-0 mt-0.5" />
                 <p>
-                  The AI determined that your indexed documents do not contain sufficient evidence to fully address this question. To prevent misinformation, no speculative answers were invented.
+                  The AI determined that the indexed documents do not contain sufficient evidence to address this question completely. To prevent legal hallucination, only available excerpts were used.
                 </p>
               </div>
             )}
@@ -431,10 +651,13 @@ export default function AskQuestion() {
                       {/* Link to PDF Preview with Page parameter */}
                       <Link
                         to={`/documents/${source.document_id}/preview?page=${source.page_number}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
                         className="btn-ghost py-1 px-2.5 text-xs text-navy-700 hover:bg-navy-50 inline-flex items-center gap-1 font-medium"
                       >
                         <Eye size={13} />
-                        <span>View Page {source.page_number} in Preview</span>
+                        <span>View Page {source.page_number} in PDF</span>
+                        <ExternalLink size={11} className="text-slate-400" />
                       </Link>
                     </div>
 
@@ -449,24 +672,6 @@ export default function AskQuestion() {
           </div>
         </div>
       )}
-
-      {/* Initial Empty State */}
-      {!asking && !hasAsked && (
-        <div className="card p-8 bg-white border border-slate-200 text-center space-y-4">
-          <div className="w-12 h-12 rounded-full bg-navy-50 flex items-center justify-center mx-auto text-navy-700">
-            <HelpCircle size={24} />
-          </div>
-          <div className="max-w-md mx-auto">
-            <h3 className="font-semibold text-slate-800 text-base">
-              Ask Any Legal Question
-            </h3>
-            <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-              LegalDoc AI uses semantic retrieval and Google Gemini to provide answers directly cited from your uploaded PDFs. Type a question or choose an example above.
-            </p>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
-

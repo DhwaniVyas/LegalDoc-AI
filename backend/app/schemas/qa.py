@@ -35,4 +35,5 @@ class AskQuestionResponse(BaseModel):
     status: Literal["answered", "insufficient_evidence", "no_relevant_sources"]
     sources: List[SourceItem] = []
     document_id: Optional[str] = None
+    timings: Optional[dict] = None
 
