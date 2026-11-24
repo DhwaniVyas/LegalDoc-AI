@@ -89,6 +89,13 @@ export const documentService = {
   },
 
   /**
+   * Get single extracted page text.
+   */
+  getDocumentPage: (id, pageNumber) => {
+    return api.get(`/documents/${id}/pages/${pageNumber}`).then((res) => res.data)
+  },
+
+  /**
    * Get extracted chunks only.
    */
   getDocumentChunks: (id) => {

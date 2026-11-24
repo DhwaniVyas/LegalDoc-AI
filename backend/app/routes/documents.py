@@ -148,6 +148,23 @@ def get_document_pages(
     return [DocumentPagePublic.model_validate(p) for p in pages]
 
 
+@router.get("/{document_id}/pages/{page_number}", response_model=DocumentPagePublic)
+def get_document_page(
+    document_id: str,
+    page_number: int,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Inspect extracted page text for a single page of a user-owned document."""
+    page = document_service.get_user_document_page(
+        db=db,
+        user_id=current_user.id,
+        document_id=document_id,
+        page_number=page_number,
+    )
+    return DocumentPagePublic.model_validate(page)
+
+
 @router.get("/{document_id}/chunks", response_model=List[DocumentChunkPublic])
 def get_document_chunks(
     document_id: str,

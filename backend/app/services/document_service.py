@@ -520,6 +520,30 @@ def get_user_document_pages(
     )
 
 
+def get_user_document_page(
+    db: Session,
+    user_id: int,
+    document_id: str,
+    page_number: int,
+) -> models.DocumentPage:
+    """Retrieve a specific extracted page for a user-owned document."""
+    doc = get_user_document_by_id(db, user_id, document_id)
+    page = (
+        db.query(models.DocumentPage)
+        .filter(
+            models.DocumentPage.document_id == doc.id,
+            models.DocumentPage.page_number == page_number,
+        )
+        .first()
+    )
+    if not page:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Page {page_number} not found for this document.",
+        )
+    return page
+
+
 def get_user_document_chunks(
     db: Session,
     user_id: int,

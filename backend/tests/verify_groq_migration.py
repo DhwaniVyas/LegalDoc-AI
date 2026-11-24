@@ -72,22 +72,14 @@ def run_all_tests():
         )
 
         # Retrieve test user and primary Constitution document
-        # User 3 (dhwvyas2302@gmail.com) has the uploaded constitution.pdf
-        user = db.query(models.User).filter(models.User.id == 3).first()
-        if not user:
-            user = db.query(models.User).first()
-
         doc = db.query(models.Document).filter(
-            models.Document.user_id == user.id,
-            models.Document.original_filename.ilike("%constitution%"),
-            models.Document.processing_status == "completed",
+            models.Document.processing_status == "completed"
         ).first()
 
-        if not doc:
-            doc = db.query(models.Document).filter(
-                models.Document.user_id == user.id,
-                models.Document.processing_status == "completed",
-            ).first()
+        if doc:
+            user = db.query(models.User).filter(models.User.id == doc.user_id).first()
+        else:
+            user = db.query(models.User).first()
 
         token = create_access_token(subject=str(user.id))
         client.cookies.set("access_token", token)

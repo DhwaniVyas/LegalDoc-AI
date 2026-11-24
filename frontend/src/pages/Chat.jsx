@@ -28,6 +28,7 @@ import { conversationService } from '../services/conversationService'
 import { documentService, formatDate } from '../services/documentService'
 import { useAuth } from '../context/AuthContext'
 import LegalAnswerRenderer from '../components/LegalAnswerRenderer'
+import CitationVerificationModal from '../components/CitationVerificationModal'
 
 const FormattedLegalAnswer = LegalAnswerRenderer
 
@@ -70,6 +71,22 @@ export default function Chat() {
   // Selected citation for viewing details
   const [activeCitationId, setActiveCitationId] = useState(null)
   const [expandedSourcesMsgId, setExpandedSourcesMsgId] = useState(null)
+
+  // Interactive PDF citation verification modal state
+  const [citationModalOpen, setCitationModalOpen] = useState(false)
+  const [activeCitationSource, setActiveCitationSource] = useState(null)
+  const [activeCitationSourceList, setActiveCitationSourceList] = useState([])
+
+  const handleCitationClick = (citationId, sourcesList) => {
+    const sources = sourcesList || []
+    const found = sources.find((s) => s.citation_id === citationId)
+    if (found) {
+      setActiveCitationSource(found)
+      setActiveCitationSourceList(sources)
+      setCitationModalOpen(true)
+      setActiveCitationId(citationId)
+    }
+  }
 
   // Rename modal/inline state
   const [editingConvId, setEditingConvId] = useState(null)
@@ -658,7 +675,7 @@ export default function Chat() {
                           text={msg.content}
                           onCitationClick={(cid) => {
                             setExpandedSourcesMsgId(msg.id)
-                            setActiveCitationId(cid)
+                            handleCitationClick(cid, msg.sources)
                           }}
                         />
                       )}
@@ -708,17 +725,27 @@ export default function Chat() {
                                       </span>
                                     </div>
 
-                                    {/* View in PDF page preview link */}
-                                    <Link
-                                      to={`/documents/${s.document_id}/preview?page=${s.page_number}`}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-navy-700 hover:text-navy-900 bg-navy-50 hover:bg-navy-100 px-2 py-0.5 rounded transition-colors"
-                                    >
-                                      <Eye size={11} />
-                                      <span>Page {s.page_number}</span>
-                                      <ExternalLink size={10} className="opacity-60" />
-                                    </Link>
+                                    {/* Actions: Verify in PDF Modal or Open in new tab */}
+                                    <div className="flex items-center gap-1.5">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleCitationClick(s.citation_id, msg.sources)}
+                                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-navy-800 hover:text-navy-950 bg-navy-50 hover:bg-navy-100 px-2 py-0.5 rounded border border-navy-200 transition-colors"
+                                        title="Open interactive PDF viewer at this page"
+                                      >
+                                        <Eye size={11} className="text-navy-700" />
+                                        <span>Verify Page {s.page_number}</span>
+                                      </button>
+                                      <Link
+                                        to={`/documents/${s.document_id}/preview?page=${s.page_number}&citation=${s.citation_id}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center text-slate-400 hover:text-slate-700 p-0.5"
+                                        title="Open in full tab"
+                                      >
+                                        <ExternalLink size={11} />
+                                      </Link>
+                                    </div>
                                   </div>
 
                                   <p className="text-slate-600 bg-slate-50 p-2 rounded text-[11px] font-mono whitespace-pre-wrap leading-relaxed border border-slate-100">
@@ -765,7 +792,7 @@ export default function Chat() {
                     <FormattedLegalAnswer
                       text={streamingText}
                       isStreaming={true}
-                      onCitationClick={(cid) => setActiveCitationId(cid)}
+                      onCitationClick={(cid) => handleCitationClick(cid, streamingSources)}
                     />
                   )}
                 </div>
@@ -859,6 +886,18 @@ export default function Chat() {
           </div>
         </div>
       )}
+
+      {/* Interactive PDF Citation Verification Modal */}
+      <CitationVerificationModal
+        isOpen={citationModalOpen}
+        onClose={() => setCitationModalOpen(false)}
+        citation={activeCitationSource}
+        allSources={activeCitationSourceList}
+        onSelectCitation={(s) => {
+          setActiveCitationSource(s)
+          setActiveCitationId(s.citation_id)
+        }}
+      />
     </div>
   )
 }

@@ -23,6 +23,7 @@ import PageHeader from '../components/PageHeader'
 import EmptyState from '../components/EmptyState'
 import { documentService } from '../services/documentService'
 import LegalAnswerRenderer from '../components/LegalAnswerRenderer'
+import CitationVerificationModal from '../components/CitationVerificationModal'
 
 const FormattedLegalAnswer = LegalAnswerRenderer
 
@@ -52,6 +53,10 @@ export default function AskQuestion() {
   const [qaErrorStatus, setQaErrorStatus] = useState(null)
   const [qaResponse, setQaResponse] = useState(null)
   const [hasAsked, setHasAsked] = useState(false)
+
+  // Interactive PDF citation verification modal state
+  const [citationModalOpen, setCitationModalOpen] = useState(false)
+  const [activeCitationSource, setActiveCitationSource] = useState(null)
 
   const abortControllerRef = useRef(null)
 
@@ -169,6 +174,15 @@ export default function AskQuestion() {
       el.scrollIntoView({ behavior: 'smooth', block: 'center' })
       el.classList.add('ring-2', 'ring-navy-600')
       setTimeout(() => el.classList.remove('ring-2', 'ring-navy-600'), 2500)
+    }
+  }
+
+  const handleOpenCitationModal = (citationId, sourcesList) => {
+    const sources = sourcesList || qaResponse?.sources || []
+    const found = sources.find((s) => s.citation_id === citationId)
+    if (found) {
+      setActiveCitationSource(found)
+      setCitationModalOpen(true)
     }
   }
 
@@ -433,6 +447,10 @@ export default function AskQuestion() {
             <div className="text-sm leading-relaxed text-slate-800 font-sans">
               <FormattedLegalAnswer
                 text={qaResponse.answer}
+                onCitationClick={(cid) => {
+                  scrollToSource(cid)
+                  handleOpenCitationModal(cid, qaResponse.sources)
+                }}
                 scrollToSource={scrollToSource}
                 isStreaming={isStreaming}
               />
@@ -515,17 +533,28 @@ export default function AskQuestion() {
                         </span>
                       </div>
 
-                      {/* Link to PDF Preview with Page parameter */}
-                      <Link
-                        to={`/documents/${source.document_id}/preview?page=${source.page_number}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="btn-ghost py-1 px-2.5 text-xs text-navy-700 hover:bg-navy-50 inline-flex items-center gap-1 font-medium"
-                      >
-                        <Eye size={13} />
-                        <span>View Page {source.page_number} in PDF</span>
-                        <ExternalLink size={11} className="text-slate-400" />
-                      </Link>
+                      {/* Actions: Verify in Modal or Open in New Tab */}
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenCitationModal(source.citation_id, qaResponse.sources)}
+                          className="btn-ghost py-1 px-2.5 text-xs text-navy-800 hover:bg-navy-50 inline-flex items-center gap-1 font-semibold border border-navy-200 rounded"
+                          title="Open interactive PDF viewer at this page"
+                        >
+                          <Eye size={13} className="text-navy-700" />
+                          <span>Verify in PDF (Page {source.page_number})</span>
+                        </button>
+
+                        <Link
+                          to={`/documents/${source.document_id}/preview?page=${source.page_number}&citation=${source.citation_id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="btn-ghost p-1 text-xs text-slate-500 hover:text-navy-900 inline-flex items-center"
+                          title="Open in full tab"
+                        >
+                          <ExternalLink size={13} />
+                        </Link>
+                      </div>
                     </div>
 
                     {/* Excerpt content */}
@@ -539,6 +568,18 @@ export default function AskQuestion() {
           </div>
         </div>
       )}
+
+      {/* Interactive PDF Citation Verification Modal */}
+      <CitationVerificationModal
+        isOpen={citationModalOpen}
+        onClose={() => setCitationModalOpen(false)}
+        citation={activeCitationSource}
+        allSources={qaResponse?.sources || []}
+        onSelectCitation={(s) => {
+          setActiveCitationSource(s)
+          scrollToSource(s.citation_id)
+        }}
+      />
     </div>
   )
 }
